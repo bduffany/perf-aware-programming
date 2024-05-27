@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+import sys
+
+for b in sys.stdin.buffer.read():
+    print(format(b, "08b"))
