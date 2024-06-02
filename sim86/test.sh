@@ -26,9 +26,19 @@ print_result() {
   printf "%-${FILE_WIDTH}s\t\x1b[${style}m%s\x1b[m\n" "$file" "$result" >&2
 }
 
-for FILE in *.asm; do
+# Test decode
+LISTING_NUMBERS=(
+  '0037'
+  '0038'
+  '0039'
+  '0041'
+)
+for NUMBER in "${LISTING_NUMBERS[@]}"; do
+  FILE=$(echo ../computer_enhance/perfaware/part1/listing_"${NUMBER}"_*.asm)
+  BASE=$(basename "$FILE")
+
   # Assemble with nasm
-  BIN="./out/${FILE/.asm/}"
+  BIN="./out/${BASE/.asm/}"
   nasm "$FILE" -o "$BIN"
   bindump <"$BIN" >"$BIN.bindump"
   # Disassemble with our program
@@ -44,9 +54,9 @@ for FILE in *.asm; do
     DIFF_CONTENT=$(diff -u "$BIN.bindump" "${BIN}_reassembled.bindump" | colordiff)
   fi
   if ! [[ "$DIFF_CONTENT" ]] && ((OK)); then
-    print_result "$FILE" '32;1' 'PASSED'
+    print_result "$BASE" '32;1' 'PASSED'
   else
-    print_result "$FILE" '31;1' 'FAILED'
+    print_result "$BASE" '31;1' 'FAILED'
     cat "$BIN.log" >&2
   fi
   printf '%s' "$DIFF_CONTENT"
