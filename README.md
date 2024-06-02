@@ -2,8 +2,8 @@
 
 My solutions to https://www.computerenhance.com/p/table-of-contents
 
-## 8086 decoder
+## 8086 simulator
 
-- Run tests with `./decode_8086/test.sh`
-- Run `./decode_8086/test_watch.sh` instead to run automatically on save
+- Run tests with `./sim86/test.sh`
+- Run `./sim86/test_watch.sh` instead to run automatically on save
 - Set env var `DEBUG=1` to get more debug output

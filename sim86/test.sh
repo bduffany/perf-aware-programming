@@ -2,10 +2,10 @@
 set -e
 
 # Test suite - run it from the root directory like
-# $ ./decode_8086/test.sh
+# $ ./sim86/test.sh
 #
 # Or run it interactively:
-# $ ./decode_8086/test_watch.sh
+# $ ./sim86/test_watch.sh
 
 cd "$(dirname "$0")"
 
