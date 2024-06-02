@@ -2,11 +2,17 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"strings"
+)
+
+var (
+	execute = flag.Bool("exec", false, "Execute instructions")
+	name    = flag.String("name", "", "File name hint (for file on stdin)")
 )
 
 var debugMode = os.Getenv("DEBUG") == "1"
@@ -36,14 +42,33 @@ func (r *debugByteReader) ResetIndex() {
 }
 
 func main() {
-	fmt.Printf("bits 16\n")
+	flag.Parse()
+
+	var process func(instruction *Instruction) error
+	if *execute {
+		var sim Sim
+		fmt.Printf("--- %s execution ---\n", *name)
+		process = func(instruction *Instruction) error {
+			return sim.Execute(instruction)
+		}
+		defer func() {
+			sim.PrintRegisters()
+		}()
+	} else {
+		// Print decoded output
+		fmt.Printf("bits 16\n")
+		process = func(instruction *Instruction) error {
+			fmt.Printf("%s %s\n", instruction.Op, strings.Join(instruction.Args, ", "))
+			return nil
+		}
+	}
 
 	r := io.ByteReader(bufio.NewReader(os.Stdin))
 	if debugMode {
 		r = &debugByteReader{r, 0}
 	}
 	for {
-		op, args, err := decodeInstruction(r)
+		instruction, err := decodeInstruction(r)
 		if err == io.EOF {
 			break
 		}
@@ -53,19 +78,22 @@ func main() {
 		if debugMode {
 			r.(*debugByteReader).ResetIndex()
 		}
-		debugf("\x1b[33m%s %s\x1b[m", op, strings.Join(args, ", "))
-		fmt.Printf("%s %s\n", op, strings.Join(args, ", "))
+		debugf("\x1b[33m%s %s\x1b[m", instruction.Op, strings.Join(instruction.Args, ", "))
+		if err := process(instruction); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
-func decodeInstruction(r io.ByteReader) (op string, args []string, err error) {
+func decodeInstruction(r io.ByteReader) (*Instruction, error) {
 	debugf("---")
 
 	byte1, err := r.ReadByte()
 	if err != nil {
-		return
+		return nil, err
 	}
 
+	var op string
 	var modRegRM, modXXXRM, arithmetic, immediate, jmp bool
 	var d, w, s, mod, reg, rm, arithmeticOp byte
 
@@ -160,8 +188,7 @@ func decodeInstruction(r io.ByteReader) (op string, args []string, err error) {
 		jmp = true
 
 	default:
-		err = fmt.Errorf("unhandled instruction [%08b]", byte1)
-		return
+		return nil, fmt.Errorf("unhandled instruction [%08b]", byte1)
 	}
 
 	if jmp {
@@ -169,7 +196,7 @@ func decodeInstruction(r io.ByteReader) (op string, args []string, err error) {
 		var ipInc8 byte
 		ipInc8, err = r.ReadByte()
 		if err != nil {
-			return
+			return nil, err
 		}
 		var arg string
 		if offset := int8(ipInc8) + 2; offset == 0 {
@@ -179,9 +206,7 @@ func decodeInstruction(r io.ByteReader) (op string, args []string, err error) {
 		} else {
 			arg = fmt.Sprintf("$%d+0", offset)
 		}
-
-		args = []string{arg}
-		return
+		return &Instruction{Op: op, Args: []string{arg}}, nil
 	}
 
 	if modRegRM {
@@ -210,7 +235,7 @@ func decodeInstruction(r io.ByteReader) (op string, args []string, err error) {
 		var byte2 byte
 		byte2, err = r.ReadByte()
 		if err != nil {
-			return
+			return nil, err
 		}
 		mod = (byte2 & 0b11000000) >> 6
 		if modRegRM {
@@ -280,14 +305,14 @@ func decodeInstruction(r io.ByteReader) (op string, args []string, err error) {
 	if displacementBits >= 8 {
 		dispLO, err = r.ReadByte()
 		if err != nil {
-			return
+			return nil, err
 		}
 		disp += uint16(dispLO)
 	}
 	if displacementBits == 16 {
 		dispHI, err = r.ReadByte()
 		if err != nil {
-			return
+			return nil, err
 		}
 		disp += uint16(dispHI) << 8
 	}
@@ -300,7 +325,7 @@ func decodeInstruction(r io.ByteReader) (op string, args []string, err error) {
 		dataBits = 8
 		dataLO, err = r.ReadByte()
 		if err != nil {
-			return
+			return nil, err
 		}
 		data += uint16(dataLO)
 
@@ -311,7 +336,7 @@ func decodeInstruction(r io.ByteReader) (op string, args []string, err error) {
 		if s == 0 && w == 1 {
 			dataHI, err = r.ReadByte()
 			if err != nil {
-				return
+				return nil, err
 			}
 			data += uint16(dataHI) << 8
 		} else if s == 1 {
@@ -358,9 +383,7 @@ func decodeInstruction(r io.ByteReader) (op string, args []string, err error) {
 		dst = regName
 	}
 
-	args = append(args, dst, src)
-
-	return
+	return &Instruction{Op: op, Args: []string{dst, src}}, nil
 }
 
 func decodeRM(rm byte) string {
